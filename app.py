@@ -8,8 +8,9 @@ from docx import Document
 
 app = Flask(__name__)
 
-# Load trained classification model
-with open("model.pkl", "rb") as f:
+# Load trained classification model — use absolute path so it works on Vercel too
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(BASE_DIR, "model.pkl"), "rb") as f:
     model = pickle.load(f)
 
 # Core skills mapping for each job role
