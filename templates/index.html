@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Analyzer & Skill Gap Recommender</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="background-decor">
+    <div class="circle circle-1"></div>
+    <div class="circle circle-2"></div>
+</div>
+
+<div class="container">
+
+    <header>
+        <div class="badge">Placement Prep AI</div>
+        <h1>AI Resume Analyzer <span>& Skill Gap Recommender</span></h1>
+        <p class="subtitle">Upload your CV or paste your skills to get your best-fit career role, skill gaps, and a learning roadmap.</p>
+    </header>
+
+    <div class="card form-card">
+
+        <!-- tab buttons -->
+        <div class="tab-container">
+            <button class="tab-btn active" onclick="switchTab('upload-form-container')">
+                <i class="fa-solid fa-file-arrow-up"></i> Upload CV
+            </button>
+            <button class="tab-btn" onclick="switchTab('text-form-container')">
+                <i class="fa-solid fa-keyboard"></i> Paste Skills
+            </button>
+        </div>
+
+        <!-- upload form -->
+        <div id="upload-form-container" class="tab-content active">
+            <form id="file-upload-form" method="POST" action="/" enctype="multipart/form-data">
+                <div class="drop-zone" id="drop-zone">
+                    <i class="fa-solid fa-cloud-arrow-up drop-zone-icon"></i>
+                    <span class="drop-zone-prompt">Drag & drop your CV here or <span class="highlight-text">browse files</span></span>
+                    <span class="drop-zone-formats">Supports PDF, DOCX, TXT</span>
+                    <input type="file" name="cv_file" id="cv_file" class="drop-zone-input" accept=".pdf,.docx,.txt" required>
+                </div>
+                <div class="selected-file-info" id="file-info" style="display:none;">
+                    <i class="fa-solid fa-file-lines file-icon"></i>
+                    <span id="filename-display">No file selected</span>
+                    <button type="button" class="remove-file-btn" onclick="clearFileSelection()">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <button type="submit" class="submit-btn" id="upload-submit-btn">
+                    <span>Analyze CV</span>
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- text paste form -->
+        <div id="text-form-container" class="tab-content">
+            <form id="text-input-form" method="POST" action="/">
+                <label for="skills" class="form-label">Paste your resume text or list your skills:</label>
+                <textarea
+                    id="skills"
+                    name="skills"
+                    placeholder="e.g. Python, Flask, SQL, Git, REST APIs..."
+                    required
+                >{{ user_input }}</textarea>
+                <button type="submit" class="submit-btn" id="text-submit-btn">
+                    <span>Analyze Text</span>
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+            </form>
+        </div>
+
+    </div>
+
+    <!-- spinner shown on submit -->
+    <div class="loading-container" id="loading-spinner">
+        <div class="spinner"></div>
+        <p>Analyzing your resume...</p>
+    </div>
+
+    {% if error_message %}
+    <div class="card error-card fade-in">
+        <div class="error-header">
+            <i class="fa-solid fa-circle-exclamation error-icon"></i>
+            <h3>Could not analyze</h3>
+        </div>
+        <p>{{ error_message }}</p>
+    </div>
+    {% endif %}
+
+    {% if predicted_role %}
+    <div class="dashboard fade-in" id="results-dashboard">
+
+        <div class="results-grid">
+
+            <div class="card result-card predicted-role-card">
+                <div class="card-tag">Best Match</div>
+                <h3>Predicted Career Role</h3>
+                <div class="role-display">
+                    <i class="fa-solid fa-briefcase role-icon"></i>
+                    <span class="role-name">{{ predicted_role }}</span>
+                </div>
+                <p class="role-desc">
+                    Your profile fits best with the <strong>{{ predicted_role }}</strong> role based on the skills found in your resume.
+                </p>
+            </div>
+
+            <div class="card result-card score-card">
+                <h3>Skill Match Score</h3>
+                <div class="progress-circle-container">
+                    <div class="progress-circle" style="background: radial-gradient(closest-side, white 79%, transparent 80% 100%), conic-gradient(var(--primary-color) {{ match_score }}%, #edf2f7 0);">
+                        <div class="progress-value">{{ match_score }}%</div>
+                    </div>
+                </div>
+                <p class="score-desc">
+                    You have {{ (match_score / 100 * 10)|int }} out of 10 core skills for this role.
+                </p>
+            </div>
+
+        </div>
+
+        <div class="card result-card skills-analysis-card">
+            <h3>Skills Breakdown</h3>
+            <div class="skills-split-container">
+
+                <div class="skills-column">
+                    <h4 class="skills-column-title match"><i class="fa-solid fa-circle-check"></i> You Already Have</h4>
+                    <div class="skills-list">
+                        {% if matched_skills %}
+                            {% for skill in matched_skills %}
+                                <span class="skill-tag skill-matched">{{ skill }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="no-skills-msg">No matching core skills found.</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="skills-column">
+                    <h4 class="skills-column-title gap"><i class="fa-solid fa-circle-dot"></i> Still Need to Learn</h4>
+                    <div class="skills-list">
+                        {% if missing_skills %}
+                            {% for skill in missing_skills %}
+                                <span class="skill-tag skill-missing">{{ skill }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="skill-tag skill-matched-all">You've got all the core skills!</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+            </div>
+
+            {% if extracted_skills %}
+            <div class="other-skills-container">
+                <h4>All Skills Detected from Your Resume</h4>
+                <div class="skills-list">
+                    {% for skill in extracted_skills %}
+                        <span class="skill-tag skill-detected">{{ skill }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card result-card learning-path-card">
+            <h3>Learning Roadmap</h3>
+            <p class="section-intro">Steps to go from where you are now to landing this role:</p>
+            <div class="timeline">
+                {% for step in path %}
+                <div class="timeline-item">
+                    <div class="timeline-marker">0{{ loop.index }}</div>
+                    <div class="timeline-content">
+                        <h4>Step {{ loop.index }}</h4>
+                        <p>{{ step }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card result-card project-card">
+            <div class="project-header">
+                <div class="project-icon-box">
+                    <i class="fa-solid fa-laptop-code"></i>
+                </div>
+                <div>
+                    <h3>Project Idea for Your Portfolio</h3>
+                    <p class="project-subtitle">Build this to show employers you are ready</p>
+                </div>
+            </div>
+            <div class="project-body">
+                <p class="project-idea">{{ project }}</p>
+                <div class="project-tip">
+                    <i class="fa-solid fa-lightbulb"></i>
+                    <span><strong>Tip:</strong> Push this to GitHub and link it on your resume!</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    {% endif %}
+
+    <footer>
+        <p>AI Resume Skill Gap Analyzer &mdash; Python Flask + scikit-learn</p>
+    </footer>
+
+</div>
+
+<script>
+    function switchTab(containerId) {
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById(containerId).classList.add('active');
+
+        if (containerId === 'upload-form-container') {
+            document.getElementById('skills').value = '';
+        } else {
+            clearFileSelection();
+        }
+    }
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('cv_file');
+    const fileInfo = document.getElementById('file-info');
+    const filenameDisplay = document.getElementById('filename-display');
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+        document.body.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
+    });
+
+    ['dragenter', 'dragover'].forEach(evt => dropZone.addEventListener(evt, () => dropZone.classList.add('highlight')));
+    ['dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, () => dropZone.classList.remove('highlight')));
+
+    dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+    function handleFiles(files) {
+        if (files.length > 0) {
+            fileInput.files = files;
+            filenameDisplay.textContent = files[0].name;
+            fileInfo.style.display = 'flex';
+            dropZone.style.display = 'none';
+        }
+    }
+
+    function clearFileSelection() {
+        fileInput.value = '';
+        fileInfo.style.display = 'none';
+        dropZone.style.display = 'flex';
+    }
+
+    const loadingSpinner = document.getElementById('loading-spinner');
+
+    document.getElementById('file-upload-form').addEventListener('submit', () => {
+        if (fileInput.files.length > 0) {
+            document.getElementById('upload-submit-btn').disabled = true;
+            loadingSpinner.style.display = 'block';
+            loadingSpinner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+
+    document.getElementById('text-input-form').addEventListener('submit', () => {
+        if (document.getElementById('skills').value.trim().length > 0) {
+            document.getElementById('text-submit-btn').disabled = true;
+            loadingSpinner.style.display = 'block';
+            loadingSpinner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+</script>
+
+</body>
+</html>
